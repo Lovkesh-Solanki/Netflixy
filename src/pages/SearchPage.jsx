@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { tmdbApi } from '../utils/tmdbApi';
 import { FaSearch } from 'react-icons/fa';
@@ -10,22 +10,46 @@ function SearchPage() {
   const [searchQuery, setSearchQuery] = useState(searchParams.get('q') || '');
   const [searchResults, setSearchResults] = useState([]);
   const [isLoading, setIsLoading] = useState(false);
+  const [hasSearched, setHasSearched] = useState(false);
+  const debounceTimerRef = useRef(null);
+
+  // Debounced search function
+  const debouncedSearch = useCallback((query) => {
+    // Clear previous timer
+    if (debounceTimerRef.current) {
+      clearTimeout(debounceTimerRef.current);
+    }
+
+    // Set new timer
+    debounceTimerRef.current = setTimeout(() => {
+      performSearch(query);
+    }, 500); // 500ms delay
+  }, []);
 
   useEffect(() => {
     const query = searchParams.get('q');
-    if (query) {
+    if (query && query !== searchQuery) {
       setSearchQuery(query);
-      performSearch(query);
+      debouncedSearch(query);
     }
-  }, [searchParams]);
+
+    // Cleanup
+    return () => {
+      if (debounceTimerRef.current) {
+        clearTimeout(debounceTimerRef.current);
+      }
+    };
+  }, [searchParams, debouncedSearch]);
 
   const performSearch = async (query) => {
     if (!query.trim()) {
       setSearchResults([]);
+      setHasSearched(false);
       return;
     }
 
     setIsLoading(true);
+    setHasSearched(true);
     
     try {
       // Search movies
@@ -60,33 +84,49 @@ function SearchPage() {
         }))
       ];
 
-      setSearchResults(combinedResults);
+      // Filter out items without images and sort by match score
+      const filteredResults = combinedResults
+        .filter(item => item.image && item.match > 0)
+        .sort((a, b) => b.match - a.match);
+
+      setSearchResults(filteredResults);
     } catch (error) {
       console.error('Search error:', error);
+      setSearchResults([]);
     } finally {
       setIsLoading(false);
     }
   };
 
+  const handleSearchChange = (e) => {
+    const query = e.target.value;
+    setSearchQuery(query);
+    
+    if (query.trim()) {
+      debouncedSearch(query);
+    } else {
+      setSearchResults([]);
+      setHasSearched(false);
+      if (debounceTimerRef.current) {
+        clearTimeout(debounceTimerRef.current);
+      }
+    }
+  };
+
   const handleSearchSubmit = (e) => {
     e.preventDefault();
-    const scrollY = window.scrollY;
-    
     if (searchQuery.trim()) {
+      // Cancel debounce and search immediately
+      if (debounceTimerRef.current) {
+        clearTimeout(debounceTimerRef.current);
+      }
+      performSearch(searchQuery);
       navigate(`/search?q=${encodeURIComponent(searchQuery)}`);
     }
-    
-    requestAnimationFrame(() => {
-      window.scrollTo(0, scrollY);
-    });
   };
 
   const handleMovieClick = (movieId) => {
-    const scrollY = window.scrollY;
     navigate(`/movie/${movieId}`);
-    requestAnimationFrame(() => {
-      window.scrollTo(0, scrollY);
-    });
   };
 
   return (
@@ -100,40 +140,65 @@ function SearchPage() {
               type="text"
               placeholder="Search for movies, shows, actors, genres..."
               value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
+              onChange={handleSearchChange}
               className="w-full bg-gray-800 text-white pl-14 pr-6 py-4 rounded-lg text-lg outline-none focus:ring-2 focus:ring-white transition"
               autoFocus
             />
+            {isLoading && (
+              <div className="absolute right-4 top-1/2 -translate-y-1/2">
+                <div className="w-6 h-6 border-2 border-white/30 border-t-white rounded-full animate-spin"></div>
+              </div>
+            )}
           </form>
+          {searchQuery && (
+            <p className="text-gray-400 text-sm mt-2">
+              {isLoading ? 'Searching...' : hasSearched ? `Found ${searchResults.length} results` : 'Type to search'}
+            </p>
+          )}
         </div>
 
         {/* Loading State */}
-        {isLoading && (
+        {isLoading && searchResults.length === 0 && (
           <div className="flex items-center justify-center py-20">
-            <div className="w-16 h-16 border-4 border-red-600 border-t-transparent rounded-full animate-spin"></div>
+            <div className="text-center">
+              <div className="w-16 h-16 border-4 border-red-600 border-t-transparent rounded-full animate-spin mx-auto mb-4"></div>
+              <p className="text-white text-lg">Searching...</p>
+            </div>
           </div>
         )}
 
-        {/* Empty State */}
-        {!isLoading && searchQuery.trim() === '' && (
+        {/* Empty State - No Search Yet */}
+        {!isLoading && !hasSearched && searchQuery.trim() === '' && (
           <div className="text-center py-20">
-            <p className="text-gray-400 text-xl">Start typing to search...</p>
+            <FaSearch className="text-gray-600 text-6xl mx-auto mb-4" />
+            <p className="text-gray-400 text-xl mb-2">Find your next favorite</p>
+            <p className="text-gray-500">Start typing to search movies and shows</p>
           </div>
         )}
 
         {/* No Results */}
-        {!isLoading && searchQuery.trim() !== '' && searchResults.length === 0 && (
+        {!isLoading && hasSearched && searchQuery.trim() !== '' && searchResults.length === 0 && (
           <div className="text-center py-20">
             <p className="text-gray-400 text-xl mb-4">No results found for "{searchQuery}"</p>
-            <p className="text-gray-500">Try searching for something else</p>
+            <p className="text-gray-500 mb-8">Try different keywords or check your spelling</p>
+            <button
+              onClick={() => {
+                setSearchQuery('');
+                setSearchResults([]);
+                setHasSearched(false);
+              }}
+              className="text-white hover:text-gray-300 underline"
+            >
+              Clear search
+            </button>
           </div>
         )}
 
         {/* Search Results */}
-        {!isLoading && searchResults.length > 0 && (
+        {searchResults.length > 0 && (
           <>
             <h2 className="text-white text-2xl font-bold mb-6">
-              Found {searchResults.length} result{searchResults.length !== 1 ? 's' : ''} for "{searchQuery}"
+              {searchResults.length} result{searchResults.length !== 1 ? 's' : ''} for "{searchQuery}"
             </h2>
             <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-4">
               {searchResults.map((movie) => (
@@ -155,9 +220,9 @@ function SearchPage() {
                     {/* Hover Overlay */}
                     <div className="absolute inset-0 bg-black/60 opacity-0 group-hover:opacity-100 transition-opacity duration-300 flex items-center justify-center">
                       <div className="text-center px-2">
-                        <p className="text-white text-sm font-bold mb-1">{movie.title}</p>
-                        {movie.match && (
-                          <p className="text-green-500 text-xs">{movie.match}% Match</p>
+                        <p className="text-white text-sm font-bold mb-1 line-clamp-2">{movie.title}</p>
+                        {movie.match && movie.match > 0 && (
+                          <p className="text-green-500 text-xs font-bold">{movie.match}% Match</p>
                         )}
                       </div>
                     </div>

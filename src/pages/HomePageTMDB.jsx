@@ -86,7 +86,7 @@ function HomePageTMDB() {
   if (loading) {
     return (
       <div className="min-h-screen flex items-center justify-center">
-        <div className="text-white text-2xl">Loading Netflix...</div>
+        <div className="text-white text-2xl">Loading Netflixy...</div>
       </div>
     );
   }
@@ -105,7 +105,7 @@ function HomePageTMDB() {
         />
         
         <MovieRow 
-          title="Netflix Originals"
+          title="Netflixy Originals"
           movies={movieCategories.netflixOriginals}
           onOpenModal={handleOpenModal}
         />

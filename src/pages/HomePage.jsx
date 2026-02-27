@@ -82,7 +82,7 @@ function HomePage() {
       <div className="min-h-screen flex items-center justify-center bg-black">
         <div className="text-center">
           <div className="w-16 h-16 border-4 border-red-600 border-t-transparent rounded-full animate-spin mx-auto mb-4"></div>
-          <p className="text-white text-xl">Loading Netflix...</p>
+          <p className="text-white text-xl">Loading Netflixy...</p>
         </div>
       </div>
     );
@@ -111,7 +111,7 @@ function HomePage() {
 
         {popularMovies.length > 0 && (
           <MovieRow 
-            title="Popular on Netflix"
+            title="Popular on Netflixy"
             movies={popularMovies}
             onOpenModal={handleOpenModal}
           />

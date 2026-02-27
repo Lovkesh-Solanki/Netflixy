@@ -21,7 +21,7 @@ function NotFoundPage() {
             className="flex items-center justify-center gap-2 bg-white text-black px-6 py-3 rounded font-bold hover:bg-gray-200 transition"
           >
             <FaHome />
-            <span>Netflix Home</span>
+            <span>Netflixy Home</span>
           </button>
           
           <button

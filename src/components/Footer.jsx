@@ -2,11 +2,11 @@ import { FaFacebookF, FaInstagram, FaTwitter, FaYoutube } from 'react-icons/fa';
 
 function Footer() {
   const handleSocialClick = (platform) => {
-    alert(`Opening Netflix ${platform}...`);
+    alert(`Opening Netflixy ${platform}...`);
   };
 
   const handleServiceCode = () => {
-    alert('Service Code: NFLX-2024-CLONE\n\nThis would show your service code for customer support.');
+    alert('Service Code: NFLX-2026-CLONE\n\nThis would show your service code for customer support.');
   };
 
   return (
@@ -64,7 +64,7 @@ function Footer() {
       </button>
 
       {/* Copyright */}
-      <p className="text-xs text-gray-500">© 1997-2024 Netflix, Inc. | Clone Project for Educational Purposes</p>
+      <p className="text-xs text-gray-500">© 2026 Netflixy, Inc. | Clone Project for Educational Purposes</p>
     </footer>
   );
 }

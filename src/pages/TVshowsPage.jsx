@@ -65,7 +65,7 @@ function TVShowsPage() {
           onOpenModal={handleOpenModal}
         />
         <MovieRow 
-          title="Popular on Netflix"
+          title="Popular on Netflixy"
           movies={popular}
           onOpenModal={handleOpenModal}
         />

@@ -98,6 +98,13 @@ export const tmdbApi = {
     return response.json();
   },
 
+  // NEW: Get videos (trailers, teasers, etc.)
+  getVideos: async (id, type = 'movie') => {
+    const response = await fetch(`${BASE_URL}/${type}/${id}/videos?api_key=${API_KEY}`);
+    const data = await response.json();
+    return data.results || [];
+  },
+
   getImageUrl: (path, size = 'w500') => {
     if (!path) return null;
     return `${IMAGE_BASE_URL}/${size}${path}`;

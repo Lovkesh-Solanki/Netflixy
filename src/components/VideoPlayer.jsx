@@ -1,5 +1,4 @@
 import { useState, useEffect, useRef } from 'react';
-import { useNavigate } from 'react-router-dom';
 import { 
   FaPlay, 
   FaPause, 
@@ -13,50 +12,67 @@ import {
   FaCog
 } from 'react-icons/fa';
 import { addToContinueWatching } from '../utils/continueWatching';
-
+import { tmdbApi } from '../utils/tmdbApi';
 
 function VideoPlayer({ movie, onClose }) {
-  const navigate = useNavigate();
   const videoContainerRef = useRef(null);
+  const iframeRef = useRef(null);
   const progressBarRef = useRef(null);
   
-  const [isPlaying, setIsPlaying] = useState(true);
+  const [trailerKey, setTrailerKey] = useState(null);
+  const [isLoadingTrailer, setIsLoadingTrailer] = useState(true);
+  const [isPlaying, setIsPlaying] = useState(false);
   const [progress, setProgress] = useState(0);
   const [currentTime, setCurrentTime] = useState(0);
   const [duration, setDuration] = useState(0);
-  const [volume, setVolume] = useState(80);
-  const [isMuted, setIsMuted] = useState(false);
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [showControls, setShowControls] = useState(true);
-  const [showVolumeSlider, setShowVolumeSlider] = useState(false);
-  
-  // Simulate video duration (random between 45-120 minutes)
+  const [hasTrailer, setHasTrailer] = useState(false);
+
+  // Load trailer from TMDB
   useEffect(() => {
-    const simulatedDuration = Math.floor(Math.random() * (7200 - 2700) + 2700); // 45-120 min in seconds
-    setDuration(simulatedDuration);
-  }, []);
+    loadTrailer();
+  }, [movie.id]);
 
-  // Add this useEffect to save progress every 10 seconds
-useEffect(() => {
-  if (!isPlaying || duration === 0) return;
-  
-  const saveInterval = setInterval(() => {
-    const progressPercentage = (currentTime / duration) * 100;
-    addToContinueWatching(movie.id, progressPercentage, currentTime);
-  }, 10000); // Save every 10 seconds
-  
-  return () => clearInterval(saveInterval);
-}, [isPlaying, currentTime, duration, movie.id]);
+  const loadTrailer = async () => {
+    setIsLoadingTrailer(true);
+    try {
+      // Determine if it's a movie or TV show
+      const isMovie = movie.type === 'movie' || !movie.type;
+      
+      // Fetch videos from TMDB
+      const videos = await tmdbApi.getVideos(movie.id, isMovie ? 'movie' : 'tv');
+      
+      // Find trailer (prefer official trailer, then teaser)
+      const trailer = videos.find(v => 
+        v.type === 'Trailer' && 
+        v.site === 'YouTube' &&
+        v.official
+      ) || videos.find(v => 
+        v.type === 'Trailer' && 
+        v.site === 'YouTube'
+      ) || videos.find(v => 
+        v.type === 'Teaser' && 
+        v.site === 'YouTube'
+      );
 
-// Also save on close
-const handleClose = () => {
-  const progressPercentage = (currentTime / duration) * 100;
-  if (progressPercentage > 5 && progressPercentage < 95) {
-    addToContinueWatching(movie.id, progressPercentage, currentTime);
-  }
-  if (onClose) onClose();
-};
-
+      if (trailer) {
+        setTrailerKey(trailer.key);
+        setHasTrailer(true);
+        setDuration(180); // Assume 3 minutes for trailer
+      } else {
+        setHasTrailer(false);
+        // Fallback: use demo video duration
+        setDuration(5400); // 90 minutes
+      }
+    } catch (error) {
+      console.error('Error loading trailer:', error);
+      setHasTrailer(false);
+      setDuration(5400);
+    } finally {
+      setIsLoadingTrailer(false);
+    }
+  };
 
   // Auto-hide controls after 3 seconds
   useEffect(() => {
@@ -71,9 +87,9 @@ const handleClose = () => {
     return () => clearTimeout(timer);
   }, [showControls, isPlaying]);
 
-  // Simulate video playback
+  // Simulate video playback (for non-trailer content)
   useEffect(() => {
-    if (!isPlaying || duration === 0) return;
+    if (!isPlaying || duration === 0 || hasTrailer) return;
     
     const interval = setInterval(() => {
       setCurrentTime(prev => {
@@ -87,7 +103,7 @@ const handleClose = () => {
     }, 1000);
     
     return () => clearInterval(interval);
-  }, [isPlaying, duration]);
+  }, [isPlaying, duration, hasTrailer]);
 
   // Update progress bar
   useEffect(() => {
@@ -96,7 +112,19 @@ const handleClose = () => {
     }
   }, [currentTime, duration]);
 
-  // Format time (seconds to HH:MM:SS or MM:SS)
+  // Save progress when playing
+  useEffect(() => {
+    if (!isPlaying || duration === 0 || hasTrailer) return;
+    
+    const saveInterval = setInterval(() => {
+      const progressPercentage = (currentTime / duration) * 100;
+      addToContinueWatching(movie.id, progressPercentage, currentTime);
+    }, 10000);
+    
+    return () => clearInterval(saveInterval);
+  }, [isPlaying, currentTime, duration, movie.id, hasTrailer]);
+
+  // Format time
   const formatTime = (seconds) => {
     const hrs = Math.floor(seconds / 3600);
     const mins = Math.floor((seconds % 3600) / 60);
@@ -110,47 +138,39 @@ const handleClose = () => {
 
   // Toggle play/pause
   const togglePlayPause = () => {
-    setIsPlaying(!isPlaying);
+    if (hasTrailer && iframeRef.current) {
+      // For YouTube iframe, we can't control it directly
+      // Just toggle our state
+      setIsPlaying(!isPlaying);
+    } else {
+      setIsPlaying(!isPlaying);
+    }
     setShowControls(true);
   };
 
   // Skip forward/backward
   const skip = (seconds) => {
-    setCurrentTime(prev => {
-      const newTime = prev + seconds;
-      if (newTime < 0) return 0;
-      if (newTime > duration) return duration;
-      return newTime;
-    });
+    if (!hasTrailer) {
+      setCurrentTime(prev => {
+        const newTime = prev + seconds;
+        if (newTime < 0) return 0;
+        if (newTime > duration) return duration;
+        return newTime;
+      });
+    }
     setShowControls(true);
   };
 
   // Handle progress bar click
   const handleProgressClick = (e) => {
+    if (hasTrailer) return; // Can't seek YouTube iframe without API
+    
     const bar = progressBarRef.current;
     const rect = bar.getBoundingClientRect();
     const clickX = e.clientX - rect.left;
     const percentage = (clickX / rect.width) * 100;
     const newTime = (percentage / 100) * duration;
     setCurrentTime(newTime);
-    setShowControls(true);
-  };
-
-  // Toggle mute
-  const toggleMute = () => {
-    setIsMuted(!isMuted);
-    setShowControls(true);
-  };
-
-  // Handle volume change
-  const handleVolumeChange = (e) => {
-    const newVolume = parseInt(e.target.value);
-    setVolume(newVolume);
-    if (newVolume === 0) {
-      setIsMuted(true);
-    } else if (isMuted) {
-      setIsMuted(false);
-    }
     setShowControls(true);
   };
 
@@ -166,9 +186,20 @@ const handleClose = () => {
     setShowControls(true);
   };
 
-  // Handle mouse move to show controls
+  // Handle mouse move
   const handleMouseMove = () => {
     setShowControls(true);
+  };
+
+  // Handle close
+  const handleClose = () => {
+    if (!hasTrailer) {
+      const progressPercentage = (currentTime / duration) * 100;
+      if (progressPercentage > 5 && progressPercentage < 95) {
+        addToContinueWatching(movie.id, progressPercentage, currentTime);
+      }
+    }
+    if (onClose) onClose();
   };
 
   // Keyboard shortcuts
@@ -180,21 +211,17 @@ const handleClose = () => {
           togglePlayPause();
           break;
         case 'ArrowLeft':
-          skip(-10);
+          if (!hasTrailer) skip(-10);
           break;
         case 'ArrowRight':
-          skip(10);
+          if (!hasTrailer) skip(10);
           break;
         case 'f':
         case 'F':
           toggleFullscreen();
           break;
-        case 'm':
-        case 'M':
-          toggleMute();
-          break;
         case 'Escape':
-          if (onClose) onClose();
+          handleClose();
           break;
         default:
           break;
@@ -203,46 +230,71 @@ const handleClose = () => {
 
     window.addEventListener('keydown', handleKeyPress);
     return () => window.removeEventListener('keydown', handleKeyPress);
-  }, [isPlaying, currentTime]);
+  }, [isPlaying, currentTime, hasTrailer]);
 
   return (
     <div 
       ref={videoContainerRef}
       className="fixed inset-0 bg-black z-50 flex items-center justify-center"
       onMouseMove={handleMouseMove}
-      onClick={togglePlayPause}
     >
-      {/* Video Preview/Thumbnail */}
+      {/* Video Content */}
       <div className="relative w-full h-full flex items-center justify-center">
-        <img 
-          src={movie.banner} 
-          alt={movie.title}
-          className="w-full h-full object-cover"
-        />
-        
-        {/* Dark Overlay */}
-        <div className="absolute inset-0 bg-black/40"></div>
-
-        {/* Play/Pause Icon Center */}
-        {!isPlaying && (
-          <button 
-            className="absolute inset-0 flex items-center justify-center group"
-            onClick={(e) => {
-              e.stopPropagation();
-              togglePlayPause();
-            }}
-          >
-            <div className="bg-black/60 rounded-full p-8 group-hover:bg-black/80 transition">
-              <FaPlay className="text-white text-6xl ml-2" />
-            </div>
-          </button>
-        )}
-
-        {/* Loading Spinner (when playing) */}
-        {isPlaying && (
-          <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
-            <div className="w-16 h-16 border-4 border-white/30 border-t-white rounded-full animate-spin"></div>
+        {isLoadingTrailer ? (
+          // Loading State
+          <div className="text-center">
+            <div className="w-16 h-16 border-4 border-white/30 border-t-white rounded-full animate-spin mx-auto mb-4"></div>
+            <p className="text-white text-xl">Loading player...</p>
           </div>
+        ) : hasTrailer && trailerKey ? (
+          // YouTube Trailer
+          <div className="w-full h-full">
+            <iframe
+              ref={iframeRef}
+              className="w-full h-full"
+              src={`https://www.youtube.com/embed/${trailerKey}?autoplay=${isPlaying ? 1 : 0}&controls=1&modestbranding=1&rel=0`}
+              title={`${movie.title} Trailer`}
+              frameBorder="0"
+              allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+              allowFullScreen
+            ></iframe>
+          </div>
+        ) : (
+          // Fallback: Static Image with Play Controls
+          <>
+            <img 
+              src={movie.banner} 
+              alt={movie.title}
+              className="w-full h-full object-cover"
+            />
+            
+            <div className="absolute inset-0 bg-black/40"></div>
+
+            {/* Play/Pause Icon Center */}
+            {!isPlaying && (
+              <button 
+                className="absolute inset-0 flex items-center justify-center group"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  togglePlayPause();
+                }}
+              >
+                <div className="bg-black/60 rounded-full p-8 group-hover:bg-black/80 transition">
+                  <FaPlay className="text-white text-6xl ml-2" />
+                </div>
+              </button>
+            )}
+
+            {/* Simulated Playing State */}
+            {isPlaying && (
+              <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
+                <div className="text-white text-center">
+                  <div className="text-2xl font-bold mb-2">Playing: {movie.title}</div>
+                  <p className="text-gray-300">Full movie not available - Trailer mode</p>
+                </div>
+              </div>
+            )}
+          </>
         )}
       </div>
 
@@ -250,13 +302,13 @@ const handleClose = () => {
       <div 
         className={`absolute inset-0 bg-gradient-to-t from-black via-transparent to-black/50 transition-opacity duration-300 ${
           showControls ? 'opacity-100' : 'opacity-0'
-        }`}
+        } ${hasTrailer ? 'pointer-events-none' : ''}`}
         onClick={(e) => e.stopPropagation()}
       >
         {/* Top Bar */}
-        <div className="absolute top-0 left-0 right-0 p-6 flex items-center justify-between">
+        <div className="absolute top-0 left-0 right-0 p-6 flex items-center justify-between pointer-events-auto">
           <button 
-            onClick={onClose}
+            onClick={handleClose}
             className="text-white hover:text-gray-300 transition"
           >
             <FaTimes className="text-3xl" />
@@ -264,6 +316,7 @@ const handleClose = () => {
           
           <div className="text-white">
             <h2 className="text-2xl font-bold">{movie.title}</h2>
+            {hasTrailer && <p className="text-sm text-gray-300 mt-1">Official Trailer</p>}
           </div>
 
           <button className="text-white hover:text-gray-300 transition">
@@ -271,141 +324,73 @@ const handleClose = () => {
           </button>
         </div>
 
-        {/* Bottom Controls */}
-        <div className="absolute bottom-0 left-0 right-0 p-6">
-          {/* Progress Bar */}
-          <div 
-            ref={progressBarRef}
-            className="w-full h-1.5 bg-gray-600 rounded-full cursor-pointer mb-4 group relative"
-            onClick={handleProgressClick}
-          >
+        {/* Bottom Controls - Only for non-trailer */}
+        {!hasTrailer && (
+          <div className="absolute bottom-0 left-0 right-0 p-6 pointer-events-auto">
+            {/* Progress Bar */}
             <div 
-              className="h-full bg-red-600 rounded-full relative transition-all group-hover:h-2"
-              style={{ width: `${progress}%` }}
+              ref={progressBarRef}
+              className="w-full h-1.5 bg-gray-600 rounded-full cursor-pointer mb-4 group relative"
+              onClick={handleProgressClick}
             >
-              <div className="absolute right-0 top-1/2 -translate-y-1/2 w-3 h-3 bg-red-600 rounded-full opacity-0 group-hover:opacity-100 transition-opacity"></div>
-            </div>
-          </div>
-
-          {/* Control Buttons */}
-          <div className="flex items-center justify-between text-white">
-            {/* Left Controls */}
-            <div className="flex items-center gap-4">
-              {/* Play/Pause */}
-              <button 
-                onClick={togglePlayPause}
-                className="hover:text-gray-300 transition text-3xl"
-              >
-                {isPlaying ? <FaPause /> : <FaPlay />}
-              </button>
-
-              {/* Skip Backward */}
-              <button 
-                onClick={() => skip(-10)}
-                className="hover:text-gray-300 transition text-2xl"
-              >
-                <FaBackward />
-              </button>
-
-              {/* Skip Forward */}
-              <button 
-                onClick={() => skip(10)}
-                className="hover:text-gray-300 transition text-2xl"
-              >
-                <FaForward />
-              </button>
-
-              {/* Volume Control */}
               <div 
-                className="flex items-center gap-2 relative"
-                onMouseEnter={() => setShowVolumeSlider(true)}
-                onMouseLeave={() => setShowVolumeSlider(false)}
+                className="h-full bg-red-600 rounded-full relative transition-all group-hover:h-2"
+                style={{ width: `${progress}%` }}
               >
+                <div className="absolute right-0 top-1/2 -translate-y-1/2 w-3 h-3 bg-red-600 rounded-full opacity-0 group-hover:opacity-100 transition-opacity"></div>
+              </div>
+            </div>
+
+            {/* Control Buttons */}
+            <div className="flex items-center justify-between text-white">
+              <div className="flex items-center gap-4">
                 <button 
-                  onClick={toggleMute}
+                  onClick={togglePlayPause}
+                  className="hover:text-gray-300 transition text-3xl"
+                >
+                  {isPlaying ? <FaPause /> : <FaPlay />}
+                </button>
+
+                <button 
+                  onClick={() => skip(-10)}
                   className="hover:text-gray-300 transition text-2xl"
                 >
-                  {isMuted || volume === 0 ? <FaVolumeMute /> : <FaVolumeUp />}
+                  <FaBackward />
                 </button>
-                
-                {showVolumeSlider && (
-                  <input
-                    type="range"
-                    min="0"
-                    max="100"
-                    value={isMuted ? 0 : volume}
-                    onChange={handleVolumeChange}
-                    className="w-24 h-1 bg-gray-600 rounded-lg appearance-none cursor-pointer slider"
-                  />
-                )}
+
+                <button 
+                  onClick={() => skip(10)}
+                  className="hover:text-gray-300 transition text-2xl"
+                >
+                  <FaForward />
+                </button>
+
+                <div className="text-sm font-medium">
+                  {formatTime(currentTime)} / {formatTime(duration)}
+                </div>
               </div>
 
-              {/* Time Display */}
-              <div className="text-sm font-medium">
-                {formatTime(currentTime)} / {formatTime(duration)}
-              </div>
-            </div>
-
-            {/* Right Controls */}
-            <div className="flex items-center gap-4">
-              {/* Episode Selector (for series) */}
-              {movie.seasons && (
-                <button className="px-4 py-2 bg-gray-800/80 hover:bg-gray-700 rounded text-sm transition">
-                  S1:E1
+              <div className="flex items-center gap-4">
+                <button 
+                  onClick={toggleFullscreen}
+                  className="hover:text-gray-300 transition text-2xl"
+                >
+                  {isFullscreen ? <FaCompress /> : <FaExpand />}
                 </button>
-              )}
-
-              {/* Fullscreen */}
-              <button 
-                onClick={toggleFullscreen}
-                className="hover:text-gray-300 transition text-2xl"
-              >
-                {isFullscreen ? <FaCompress /> : <FaExpand />}
-              </button>
+              </div>
             </div>
           </div>
-        </div>
-
-        {/* Skip Intro/Credits Buttons */}
-        {currentTime > 30 && currentTime < 120 && (
-          <button 
-            onClick={() => skip(90)}
-            className="absolute right-8 bottom-32 bg-white/90 hover:bg-white text-black px-6 py-3 rounded font-bold transition"
-          >
-            Skip Intro
-          </button>
         )}
 
-        {progress > 90 && (
-          <button 
-            className="absolute right-8 bottom-32 bg-white/90 hover:bg-white text-black px-6 py-3 rounded font-bold transition"
-            onClick={onClose}
-          >
-            Next Episode
-          </button>
+        {/* Trailer Notice */}
+        {hasTrailer && (
+          <div className="absolute bottom-8 left-1/2 -translate-x-1/2 bg-black/80 px-6 py-3 rounded-lg pointer-events-auto">
+            <p className="text-white text-center font-semibold">
+              ▶ Watching Official Trailer
+            </p>
+          </div>
         )}
       </div>
-
-      {/* Custom Slider Styles */}
-      <style jsx>{`
-        .slider::-webkit-slider-thumb {
-          appearance: none;
-          width: 12px;
-          height: 12px;
-          background: white;
-          cursor: pointer;
-          border-radius: 50%;
-        }
-        
-        .slider::-moz-range-thumb {
-          width: 12px;
-          height: 12px;
-          background: white;
-          cursor: pointer;
-          border-radius: 50%;
-          border: none;
-        }
-      `}</style>
     </div>
   );
 }
