@@ -14,19 +14,19 @@ function Footer() {
       {/* Social Icons */}
       <div className="flex gap-6 mb-8">
         <FaFacebookF 
-          className="text-2xl cursor-pointer hover:text-red transition duration-200"
+          className="text-2xl cursor-pointer hover:text-white transition duration-200"
           onClick={() => handleSocialClick('Facebook')}
         />
         <FaInstagram 
-          className="text-2xl cursor-pointer hover:text-red transition duration-200"
+          className="text-2xl cursor-pointer hover:text-white transition duration-200"
           onClick={() => handleSocialClick('Instagram')}
         />
         <FaTwitter 
-          className="text-2xl cursor-pointer hover:text-red transition duration-200"
+          className="text-2xl cursor-pointer hover:text-white transition duration-200"
           onClick={() => handleSocialClick('Twitter')}
         />
         <FaYoutube 
-          className="text-2xl cursor-pointer hover:text-red transition duration-200"
+          className="text-2xl cursor-pointer hover:text-white transition duration-200"
           onClick={() => handleSocialClick('YouTube')}
         />
       </div>
@@ -71,3 +71,4 @@ function Footer() {
 
 
 export default Footer;
+
