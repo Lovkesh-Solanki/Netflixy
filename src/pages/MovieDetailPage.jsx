@@ -167,7 +167,7 @@ function MovieDetailPage() {
         {/* Trailer Section */}
         {movie.trailer && (
           <div className="px-6 md:px-12 py-10">
-            <h2 className="text-white text-2xl font-bold mb-4">Trailer</h2>
+            <h2 className="text-white text-2xl font-bold mb-4">Related video</h2>
             <div className="aspect-video max-w-4xl">
               <iframe 
                 width="100%" 
@@ -230,6 +230,7 @@ function MovieDetailPage() {
 }
 
 export default MovieDetailPage;
+
 
 
 
